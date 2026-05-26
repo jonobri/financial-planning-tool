@@ -70,8 +70,9 @@ dollars (nominal)**.
    independent path for property growth, run through a full year‑by‑year
    cashflow each.
 3. **The cashflow** routes salary through Australian income tax, super
-   contributions, DCA investing, and housing, then aggregates the paths into
-   percentile bands.
+   contributions, saving and housing, then aggregates the paths into percentile
+   bands. Each year's savings (take‑home − living − housing) are split between
+   extra mortgage repayments and ETF investing by a single slider.
 
 ### Project structure
 
@@ -115,10 +116,20 @@ tests/smoke_test.py  Offline end‑to‑end engine test
   mortgage. In retirement, home equity can be released (downsizing / reverse
   mortgage) up to 60% of value as a last resort.
 
-**Cashflow:**
+**Cashflow & saving:**
 - Living and retirement spending are held constant in **real** terms (indexed to
-  inflation). Spare cash above a 6‑month buffer is swept into the ETF portfolio,
-  so the renter's housing savings are invested for a fair comparison.
+  inflation). Each year's surplus above a 6‑month buffer is your *total savings*,
+  split between **extra mortgage repayments** and **ETF investing** by a slider —
+  so you can compare paying down the loan vs investing.
+- **Income step‑ups**: optional age→salary milestones model promotions; salary
+  grows at the wage‑growth rate between them.
+- If commitments ever exceed income + assets, the year is flagged as a
+  **cashflow gap** (an affordability warning) rather than accruing phantom debt.
+
+**Portfolio:**
+- Includes **Betashares geared** ETFs (GEAR, GGUS, GHHF, G200). Return stats use
+  a robust clip that preserves geared funds' real high volatility (e.g. GEAR's
+  ~‑60% month in 2020) while still removing corrupt data points.
 
 ### Known limitations
 - Long‑horizon (60+ year) **nominal** figures look huge; read results in *real*

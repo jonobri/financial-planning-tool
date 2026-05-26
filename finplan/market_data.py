@@ -190,9 +190,15 @@ def compute_return_stats(
         log_rets = pd.DataFrame(columns=tickers)
     else:
         log_rets = np.log(prices / prices.shift(1))
-        # Clip implausible monthly moves (|log| > 0.5 ~ -39%/+65%). For broad
-        # ETFs these are almost always corrupt Yahoo data points, not real moves.
-        log_rets = log_rets.clip(lower=-0.5, upper=0.5)
+        # Robustly clip only gross data errors: anything beyond ~10 robust sigmas
+        # (median ± 10·1.4826·MAD) per asset. This is adaptive, so it preserves a
+        # geared fund's genuine -50%+ months while still removing corrupt Yahoo
+        # points (which are typically 20-90 sigma spikes).
+        med = log_rets.median()
+        mad = (log_rets - med).abs().median()
+        robust_sigma = (1.4826 * mad).replace(0, np.inf)  # no clip if MAD is 0
+        log_rets = log_rets.clip(lower=med - 10 * robust_sigma,
+                                 upper=med + 10 * robust_sigma, axis=1)
         for t in tickers:
             if t in log_rets.columns:
                 history_years[t] = log_rets[t].dropna().shape[0] / TRADING_MONTHS

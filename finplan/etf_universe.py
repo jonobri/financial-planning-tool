@@ -61,6 +61,13 @@ ETF_UNIVERSE: dict[str, ETF] = {
         ETF("VAP.AX", "Vanguard Australian Property (REIT)", "AU Property", 0.0023, 0.20, 0.045, 2011),
         # --- Gold ---
         ETF("GOLD.AX", "Global X Physical Gold", "Gold", 0.0040, 0.0, 0.0, 2003),
+        # --- Betashares geared (internally leveraged) ---
+        # GEAR/GGUS are the ~50-65% LVR "hedge fund" geared products; GHHF/G200 are
+        # the more moderately geared (~30-40% LVR) Wealth Builder range.
+        ETF("GEAR.AX", "Betashares Geared Australian Equity (G)", "Geared Equity", 0.0080, 0.70, 0.020, 2014),
+        ETF("GGUS.AX", "Betashares Geared US Equity – Currency Hedged (G)", "Geared Equity", 0.0080, 0.0, 0.010, 2015),
+        ETF("GHHF.AX", "Betashares Wealth Builder Diversified All Growth Geared", "Geared Diversified", 0.0035, 0.25, 0.020, 2024),
+        ETF("G200.AX", "Betashares Wealth Builder Australia 200 Geared", "Geared Diversified", 0.0035, 0.65, 0.025, 2024),
     ]
 }
 
@@ -76,6 +83,8 @@ ASSET_CLASS_FALLBACK: dict[str, tuple[float, float]] = {
     "AU Bonds": (0.035, 0.05),
     "AU Property": (0.080, 0.18),
     "Gold": (0.060, 0.16),
+    "Geared Equity": (0.120, 0.32),       # ~2.3x exposure; high return, high vol
+    "Geared Diversified": (0.105, 0.22),  # ~1.5x exposure (Wealth Builder range)
 }
 
 
@@ -94,6 +103,9 @@ def build_anchors(equity_anchor: float, bond_anchor: float) -> dict[str, float]:
         "AU Bonds": bond_anchor,
         "AU Property": equity_anchor - 0.010,
         "Gold": 0.050,
+        # Geared long-run anchor ≈ exposure*equity − (exposure−1)*borrow_cost.
+        "Geared Equity": 2.3 * equity_anchor - 0.075,
+        "Geared Diversified": 1.5 * equity_anchor - 0.030,
     }
 
 

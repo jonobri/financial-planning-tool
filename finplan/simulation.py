@@ -57,7 +57,13 @@ class Plan:
 
     # Investing (outside super, "CMC" account)
     portfolio_weights: dict[str, float] = field(default_factory=lambda: {"VAS.AX": 0.40, "VGS.AX": 0.60})
-    monthly_dca: float = 1_500
+    # Saving: surplus (take-home − living − housing) is split between extra
+    # mortgage repayments and ETF investing. 0 = all to ETFs, 1 = all to mortgage.
+    savings_split_to_mortgage: float = 0.40
+
+    # Optional career income step-ups: list of (age, new_salary). Between
+    # milestones, salary grows at `salary_growth` / wage growth.
+    salary_milestones: list[tuple[int, float]] = field(default_factory=list)
 
     # Super
     salary_sacrifice: float = 0.0
@@ -178,6 +184,20 @@ def _sample_property_returns(a: config.Assumptions, n_paths, n_years, rng) -> np
     return np.expm1(rng.normal(mu, sigma, (n_paths, n_years)))
 
 
+def _salary_schedule(plan: Plan, wage_growth: float) -> dict[int, float]:
+    """Salary for each age: grows at wage_growth, jumps to milestone values, and
+    is zero from retirement age onward."""
+    milestones = {int(a): float(s) for a, s in plan.salary_milestones}
+    schedule: dict[int, float] = {}
+    sal = plan.current_salary
+    for age in range(plan.current_age, plan.end_age + 1):
+        if age in milestones:
+            sal = milestones[age]
+        schedule[age] = sal if age < plan.retirement_age else 0.0
+        sal *= (1 + wage_growth)
+    return schedule
+
+
 # ---------------------------------------------------------------------------
 def run_montecarlo(
     plan: Plan,
@@ -220,11 +240,14 @@ def run_montecarlo(
     div_yield = _weighted(plan.portfolio_weights, "dist_yield")
     franking = _weighted(plan.portfolio_weights, "franking")
     super_income_yield = _weighted(plan.super_weights, "dist_yield")
+    # Deterministic salary trajectory: grow at wage_growth, jump at milestones,
+    # zero once retired. Same across all paths.
+    salary_by_age = _salary_schedule(plan, wage_growth)
 
     # Output buffers
     comp_names = [
-        "net_worth", "super", "portfolio", "cash",
-        "home_equity", "property_value", "mortgage", "spending_gap", "age_pension",
+        "net_worth", "super", "portfolio", "cash", "home_equity", "property_value",
+        "mortgage", "spending_gap", "cashflow_gap", "age_pension",
     ]
     out = {k: np.zeros((n_paths, n_years)) for k in comp_names}
 
@@ -244,12 +267,12 @@ def run_montecarlo(
         equity_released = 0.0          # cumulative downsizing / reverse-mortgage draws
         fhss_balance = 0.0             # FHSS savings held in super, earmarked for deposit
         fhss_contributed = 0.0         # cumulative gross FHSS contributions (cap tracking)
-        salary = plan.current_salary
 
         for t in range(n_years):
             age = plan.current_age + t
             retired = age >= plan.retirement_age
             pension_phase = retired and age >= config.PRESERVATION_AGE
+            salary = salary_by_age[age]
             # Index living costs to inflation so they stay constant in real terms.
             infl_factor = (1 + a.inflation) ** t
             living = plan.living_expenses * infl_factor
@@ -282,6 +305,7 @@ def run_montecarlo(
 
             # ---- interest & dividends (taxable) ----
             interest_income = cash * cash_rate if cash > 0 else 0.0
+            taxable_interest = interest_income
             dividends = max(portfolio, 0.0) * div_yield
 
             # ---- housing purchase event ----
@@ -330,7 +354,7 @@ def run_montecarlo(
                 mortgage_balance = 0.0
 
             # ---- taxes ---- (FHSS contributions are pre-tax, like salary sacrifice)
-            taxable_emp = (salary - plan.salary_sacrifice - fhss_contrib if not retired else 0.0) + interest_income
+            taxable_emp = (salary - plan.salary_sacrifice - fhss_contrib if not retired else 0.0) + taxable_interest
             inc_tax = tax.total_income_tax(max(taxable_emp, 0.0))
             div_tax = tax.tax_on_dividends(dividends, franking, max(taxable_emp, 0.0))
 
@@ -340,21 +364,42 @@ def run_montecarlo(
 
             # ---- cashflow ----
             pension = 0.0
+            cashflow_gap = 0.0
             if not retired:
                 cash_salary = salary - plan.salary_sacrifice - fhss_contrib
-                cash_in = cash_salary + interest_income
-                cash_out = inc_tax + div_tax + living + housing_cash
-                dca = plan.monthly_dca * 12
-                cash += cash_in - cash_out - dca
-                portfolio += dca
-                cost_base += dca
-                # Sweep excess cash above a 6-month buffer into the portfolio.
+                cash += cash_salary + interest_income - inc_tax - div_tax - living - housing_cash
+                # Total savings = cash above a 6-month buffer. Split between extra
+                # mortgage repayments and ETF investing.
                 buffer = 0.5 * living
-                if cash > buffer:
-                    sweep = cash - buffer
-                    cash -= sweep
-                    portfolio += sweep
-                    cost_base += sweep
+                savings = max(cash - buffer, 0.0)
+                if savings > 0:
+                    has_loan = owns_home and mortgage is not None and mortgage.balance > 0
+                    to_mortgage = savings * plan.savings_split_to_mortgage if has_loan else 0.0
+                    paid = min(to_mortgage, mortgage.balance) if mortgage else 0.0
+                    if mortgage:
+                        mortgage.balance -= paid
+                    invest = savings - paid                 # remainder (incl. any unused) to ETFs
+                    cash -= savings
+                    portfolio += invest
+                    cost_base += invest
+                # If income didn't cover outgoings (e.g. a stretched deposit),
+                # sell investments rather than carrying a negative cash balance.
+                if cash < 0 and portfolio > 0:
+                    sell = min(portfolio, -cash)
+                    gain = sell * (1 - cost_base / portfolio)
+                    cost_base *= (1 - sell / portfolio)
+                    portfolio -= sell
+                    cash += sell
+                    cgt = tax.capital_gains_tax(gain, salary)
+                    pay = min(portfolio, cgt)
+                    portfolio -= pay
+                    cash -= (cgt - pay)
+                # If commitments still exceed income + assets, the plan is
+                # unaffordable this year: record the shortfall and floor cash at 0
+                # (rather than accumulating phantom debt).
+                if cash < 0:
+                    cashflow_gap = -cash
+                    cash = 0.0
                 spending_gap = 0.0
             else:
                 # Retirement: fund spending + housing from cash -> super -> portfolio.
@@ -383,11 +428,13 @@ def run_montecarlo(
                     cost_base *= (1 - sell / portfolio)
                     portfolio -= sell
                     need -= sell
-                    # Settle CGT from any remaining portfolio, then cash.
+                    # Settle CGT from remaining portfolio; fund any remainder from
+                    # the next steps (super already drawn, then equity) rather than
+                    # overdrawing cash.
                     cgt = tax.capital_gains_tax(gain, 0.0)
                     pay = min(portfolio, cgt)
                     portfolio -= pay
-                    cash -= (cgt - pay)
+                    need += (cgt - pay)
 
                 # Last resort: release home equity (downsize / reverse mortgage),
                 # up to 60% of the property value, leaving a buffer.
@@ -400,6 +447,8 @@ def run_montecarlo(
                 spending_gap = max(need, 0.0)
 
             # ---- record ---- (FHSS savings sit in super until released)
+            # Re-read the mortgage balance so any extra repayment this year shows.
+            mortgage_balance = mortgage.balance if (owns_home and mortgage) else 0.0
             home_equity = max(property_value - mortgage_balance - equity_released, 0.0) if owns_home else 0.0
             net_worth = cash + portfolio + sup.balance + fhss_balance + home_equity
             out["net_worth"][p, t] = net_worth
@@ -410,11 +459,8 @@ def run_montecarlo(
             out["property_value"][p, t] = property_value if owns_home else 0.0
             out["mortgage"][p, t] = mortgage_balance
             out["spending_gap"][p, t] = spending_gap
+            out["cashflow_gap"][p, t] = cashflow_gap
             out["age_pension"][p, t] = pension
-
-            # ---- grow salary for next year ----
-            if not retired:
-                salary *= (1 + wage_growth)
 
     ages = np.arange(plan.current_age, plan.end_age + 1)
     years = sim.start_year + (ages - plan.current_age)
@@ -449,16 +495,17 @@ def housing_purchasing_power(
     pf_w = _weight_vector(plan.portfolio_weights, stats.tickers)
     exp_port = float(stats.mean_simple @ pf_w)
     wage_growth = plan.salary_growth if plan.salary_growth is not None else a.wage_growth
+    salary_by_age = _salary_schedule(plan, wage_growth)
 
     cash = plan.starting_cash
     portfolio = plan.starting_portfolio
-    salary = plan.current_salary
     rows = []
     r = a.mortgage_rate / 12
     n = plan.mortgage_term * 12
     annuity = (1 - (1 + r) ** (-n)) / r if r else n
 
     for age in range(plan.current_age, plan.retirement_age + 1):
+        salary = salary_by_age.get(age, plan.current_salary)
         deposit_capacity = max(cash + portfolio, 0.0)
         monthly_capacity = serviceability_ratio * salary / 12
         max_loan = monthly_capacity * annuity
@@ -477,14 +524,12 @@ def housing_purchasing_power(
                 "max_affordable_price": max_price,
             }
         )
-        # Advance one year (expected returns, keep saving via DCA + surplus).
-        taxable = salary
-        inc_tax = tax.total_income_tax(taxable)
-        annual_save = plan.monthly_dca * 12
+        # Advance one year (expected returns). Pre-purchase, all savings are
+        # liquid/invested toward the deposit.
+        inc_tax = tax.total_income_tax(salary)
         rent = plan.home_price * a.rent_yield * (1 + a.rent_growth) ** (age - plan.current_age)
-        surplus = salary - inc_tax - plan.living_expenses - rent - annual_save
-        portfolio = portfolio * (1 + exp_port) + annual_save
-        cash = max(cash + surplus, 0.0)
-        salary *= (1 + wage_growth)
+        savings = max(salary - inc_tax - plan.living_expenses - rent, 0.0)
+        portfolio = portfolio * (1 + exp_port) + savings
+        cash = max(cash, 0.0)
 
     return pd.DataFrame(rows).set_index("age")
