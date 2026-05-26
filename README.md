@@ -52,6 +52,21 @@ PYTHONPATH=. .venv/bin/python tests/feature_test.py   # scenario blend, bootstra
 All dollar figures toggle between **today's dollars (real)** and **future
 dollars (nominal)**.
 
+### 🏠 Home Buying Optimiser (second page)
+
+A second page (in the sidebar nav, prefilled from your saved plan) focuses on the
+home-purchase decision with a **deterministic** "dead money" lens:
+
+| Tab | Answers |
+|-----|---------|
+| 💰 **Deposit size** | How big a deposit to put down — trading off less interest (and avoiding LMI above 20%) against the opportunity cost of tying up cash. Flags the best feasible deposit. |
+| ⏱️ **When to buy** | Net worth at your horizon for buying in N years vs renting forever, plus rent paid while you wait. |
+| 📉 **Dead money over time** | Cumulative rent vs cumulative mortgage interest + ownership costs for a chosen deposit/timing, and the year buying's net worth overtakes renting. |
+
+Rent and mortgage interest are both "dead money" (no equity); principal isn't.
+When your investment return beats property growth, smaller deposits / renting
+look better; below it, bigger deposits / buying win.
+
 ---
 
 ## How it works
@@ -85,7 +100,9 @@ finplan/
   superann.py      SG + salary sacrifice, contributions/earnings tax, drawdown
   housing.py       Stamp duty (+FHB), LMI, mortgage amortisation, ownership costs
   simulation.py    Life simulation, Monte Carlo engine, housing purchasing power
-app.py             Streamlit UI
+  home_optimizer.py  Deterministic deposit/timing sweeps + dead-money analysis
+app.py                       Streamlit UI (main planner)
+pages/1_🏠_Home_Buying_Optimiser.py   Second page: home-buying optimiser
 tests/smoke_test.py  Offline end‑to‑end engine test
 ```
 
