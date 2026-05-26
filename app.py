@@ -35,8 +35,10 @@ def opt_index(options, key, fallback):
 
 
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner="Downloading ETF history…")
+@st.cache_data(show_spinner="Loading ETF history…", persist="disk", ttl=86_400)
 def load_stats(tickers: tuple[str, ...]):
+    # persist="disk" keeps the computed return stats across app rebuilds/restarts
+    # (the raw prices are separately cached in data_cache/); ttl refreshes daily.
     return compute_return_stats(list(tickers))
 
 

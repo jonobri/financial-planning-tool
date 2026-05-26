@@ -18,6 +18,7 @@ profiles/
 
 # Streamlit
 .streamlit/secrets.toml
+.streamlit/cache/
 
 # Notebooks
 .ipynb_checkpoints/
