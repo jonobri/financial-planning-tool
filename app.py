@@ -14,7 +14,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from finplan import config
+from finplan import config, storage
 from finplan.etf_universe import ETF_UNIVERSE
 from finplan.market_data import compute_return_stats
 from finplan.simulation import Plan, housing_purchasing_power, run_montecarlo
@@ -22,6 +22,20 @@ from finplan.simulation import Plan, housing_purchasing_power, run_montecarlo
 st.set_page_config(page_title="FinPlan — AU Financial Planner", layout="wide", page_icon="📈")
 
 PALETTE = {"buy": "#2563eb", "rent": "#d97706", "band": "rgba(37,99,235,0.15)", "band2": "rgba(37,99,235,0.28)"}
+
+# Auto-saved plan inputs (restored on startup; re-saved on every run).
+STORE = storage.load()
+
+
+def g(key, default):
+    """Saved value for a widget, falling back to its default."""
+    return STORE.get(key, default)
+
+
+def opt_index(options, key, fallback):
+    """Index of the saved option (or fallback) for selectbox / radio."""
+    val = STORE.get(key, fallback)
+    return options.index(val) if val in options else options.index(fallback)
 
 
 # ---------------------------------------------------------------------------
@@ -42,21 +56,28 @@ def money(x: float) -> str:
     return f"{sign}${x:,.0f}"
 
 
-def weight_inputs(label: str, defaults: dict[str, float], key: str) -> dict[str, float]:
-    """Multiselect tickers + per-ticker weight inputs, returned normalised."""
+def weight_inputs(label: str, defaults: dict[str, float], key: str):
+    """Multiselect tickers + per-ticker weight inputs.
+
+    Restores the saved selection/weights. Returns (normalised_weights, raw_dict)
+    where raw_dict carries the exact widget values to persist for next time.
+    """
     options = list(ETF_UNIVERSE.keys())
     fmt = {t: ETF_UNIVERSE[t].label for t in options}
+    saved_sel = [t for t in g(f"{key}_sel", list(defaults)) if t in options]
     chosen = st.multiselect(
-        label, options, default=list(defaults), format_func=lambda t: fmt[t], key=f"{key}_sel"
+        label, options, default=saved_sel or list(defaults), format_func=lambda t: fmt[t], key=f"{key}_sel"
     )
     weights: dict[str, float] = {}
     for t in chosen:
         weights[t] = st.number_input(
             f"  {t.replace('.AX','')} weight %", 0.0, 100.0,
-            value=float(defaults.get(t, 100.0 / max(len(chosen), 1))), step=5.0, key=f"{key}_{t}",
+            value=float(g(f"{key}_w_{t}", defaults.get(t, 100.0 / max(len(chosen), 1)))),
+            step=5.0, key=f"{key}_{t}",
         )
     total = sum(weights.values()) or 1.0
-    return {t: w / total for t, w in weights.items()}
+    raw = {f"{key}_sel": chosen, **{f"{key}_w_{t}": weights[t] for t in chosen}}
+    return {t: w / total for t, w in weights.items()}, raw
 
 
 def fan_chart(result, component, real, color, name, fig=None, pcts=(10, 25, 50, 75, 90)):
@@ -80,49 +101,55 @@ def fan_chart(result, component, real, color, name, fig=None, pcts=(10, 25, 50, 
 # Sidebar — the plan (inside a form so heavy recompute only runs on submit)
 # ---------------------------------------------------------------------------
 st.sidebar.title("📋 Your plan")
+_clamp = lambda v, lo, hi: max(lo, min(hi, v))
+_PATHS = [500, 1000, 2000, 5000]
+_SCENARIOS = ["Historical (full window)", "Long-run blend (50%)", "Conservative (long-run)", "Custom"]
+_SAMPLING = ["Monte Carlo (normal)", "Historical bootstrap"]
+_STATES = ["NSW", "VIC", "OTHER"]
+
 with st.sidebar.form("plan_form"):
     st.subheader("Life stages")
-    current_age = st.slider("Current age", 18, 70, 32)
-    retirement_age = st.slider("Retirement age", current_age + 1, 75, max(60, current_age + 1))
-    end_age = st.slider("Plan to age", retirement_age + 1, 105, 95)
+    current_age = st.slider("Current age", 18, 70, int(g("current_age", 32)))
+    retirement_age = st.slider("Retirement age", current_age + 1, 75,
+                               _clamp(int(g("retirement_age", max(60, current_age + 1))), current_age + 1, 75))
+    end_age = st.slider("Plan to age", retirement_age + 1, 105,
+                        _clamp(int(g("end_age", 95)), retirement_age + 1, 105))
 
     st.subheader("Income & expenses (today's $)")
-    current_salary = st.number_input("Gross salary (excl. super)", 0, 2_000_000, 110_000, step=5_000)
-    living_expenses = st.number_input("Living expenses / yr (excl. housing)", 0, 500_000, 45_000, step=1_000)
-    retirement_spending = st.number_input("Desired retirement spend / yr", 0, 500_000, 60_000, step=1_000)
+    current_salary = st.number_input("Gross salary (excl. super)", 0, 2_000_000, int(g("current_salary", 110_000)), step=5_000)
+    living_expenses = st.number_input("Living expenses / yr (excl. housing)", 0, 500_000, int(g("living_expenses", 45_000)), step=1_000)
+    retirement_spending = st.number_input("Desired retirement spend / yr", 0, 500_000, int(g("retirement_spending", 60_000)), step=1_000)
 
     st.subheader("Starting balances")
-    starting_cash = st.number_input("Cash / savings", 0, 5_000_000, 30_000, step=5_000)
-    starting_portfolio = st.number_input("ETF portfolio (outside super)", 0, 10_000_000, 20_000, step=5_000)
-    starting_super = st.number_input("Superannuation", 0, 10_000_000, 90_000, step=5_000)
+    starting_cash = st.number_input("Cash / savings", 0, 5_000_000, int(g("starting_cash", 30_000)), step=5_000)
+    starting_portfolio = st.number_input("ETF portfolio (outside super)", 0, 10_000_000, int(g("starting_portfolio", 20_000)), step=5_000)
+    starting_super = st.number_input("Superannuation", 0, 10_000_000, int(g("starting_super", 90_000)), step=5_000)
 
     st.subheader("📈 Investing — your CMC portfolio")
-    portfolio_weights = weight_inputs("Outside-super ETFs", {"VAS.AX": 40, "VGS.AX": 60}, "pf")
-    monthly_dca = st.number_input("Monthly DCA contribution", 0, 100_000, 1_500, step=100)
+    portfolio_weights, pf_raw = weight_inputs("Outside-super ETFs", {"VAS.AX": 40, "VGS.AX": 60}, "pf")
+    monthly_dca = st.number_input("Monthly DCA contribution", 0, 100_000, int(g("monthly_dca", 1_500)), step=100)
 
     st.subheader("🏦 Superannuation")
-    salary_sacrifice = st.number_input("Extra salary sacrifice / yr", 0, 30_000, 0, step=500)
+    salary_sacrifice = st.number_input("Extra salary sacrifice / yr", 0, 30_000, int(g("salary_sacrifice", 0)), step=500)
     with st.expander("Super investment mix"):
-        super_weights = weight_inputs("Super ETFs / proxy", {"VGS.AX": 55, "VAS.AX": 30, "VAF.AX": 15}, "su")
+        super_weights, su_raw = weight_inputs("Super ETFs / proxy", {"VGS.AX": 55, "VAS.AX": 30, "VAF.AX": 15}, "su")
 
     st.subheader("🏠 Housing")
-    buy_home = st.checkbox("Model buying a home", value=True)
-    buy_age = st.slider("Purchase age", current_age, end_age, min(35, end_age))
-    home_price = st.number_input("Home price (today's $)", 0, 10_000_000, 850_000, step=25_000)
-    deposit_target = st.number_input("Cash deposit", 0, 5_000_000, 170_000, step=10_000)
-    mortgage_term = st.slider("Mortgage term (yrs)", 10, 30, 30)
-    state = st.selectbox("State (stamp duty)", ["NSW", "VIC", "OTHER"])
-    first_home_buyer = st.checkbox("First home buyer concession", value=True)
-    fhss_enabled = st.checkbox("Use First Home Super Saver (FHSS)", value=False,
+    buy_home = st.checkbox("Model buying a home", value=bool(g("buy_home", True)))
+    buy_age = st.slider("Purchase age", current_age, end_age, _clamp(int(g("buy_age", min(35, end_age))), current_age, end_age))
+    home_price = st.number_input("Home price (today's $)", 0, 10_000_000, int(g("home_price", 850_000)), step=25_000)
+    deposit_target = st.number_input("Cash deposit", 0, 5_000_000, int(g("deposit_target", 170_000)), step=10_000)
+    mortgage_term = st.slider("Mortgage term (yrs)", 10, 30, int(g("mortgage_term", 30)))
+    state = st.selectbox("State (stamp duty)", _STATES, index=opt_index(_STATES, "state", "NSW"))
+    first_home_buyer = st.checkbox("First home buyer concession", value=bool(g("first_home_buyer", True)))
+    fhss_enabled = st.checkbox("Use First Home Super Saver (FHSS)", value=bool(g("fhss_enabled", False)),
                                help="Make pre-tax super contributions and release them for the deposit.")
-    fhss_annual = st.number_input("  FHSS contribution / yr", 0, 15_000, 15_000, step=1_000,
+    fhss_annual = st.number_input("  FHSS contribution / yr", 0, 15_000, int(g("fhss_annual", 15_000)), step=1_000,
                                   disabled=not fhss_enabled)
 
     st.subheader("📉 Return scenario")
     return_scenario = st.selectbox(
-        "Return assumptions",
-        ["Historical (full window)", "Long-run blend (50%)", "Conservative (long-run)", "Custom"],
-        index=1,
+        "Return assumptions", _SCENARIOS, index=opt_index(_SCENARIOS, "return_scenario", _SCENARIOS[1]),
         help="Recent ETF history can overstate the future. Blend it toward sustainable long-run anchors.",
     )
     if return_scenario == "Historical (full window)":
@@ -132,40 +159,75 @@ with st.sidebar.form("plan_form"):
     elif return_scenario == "Conservative (long-run)":
         return_blend, equity_anchor, bond_anchor = 1.0, 0.07, 0.035
     else:
-        return_blend = st.slider("Blend toward long-run %", 0, 100, 50) / 100
-        equity_anchor = st.slider("Long-run equity return %", 4.0, 12.0, 8.0, 0.1) / 100
-        bond_anchor = st.slider("Long-run bond return %", 1.0, 6.0, 4.0, 0.1) / 100
+        return_blend = st.slider("Blend toward long-run %", 0, 100, int(g("return_blend_pct", 50))) / 100
+        equity_anchor = st.slider("Long-run equity return %", 4.0, 12.0, float(g("equity_anchor_pct", 8.0)), 0.1) / 100
+        bond_anchor = st.slider("Long-run bond return %", 1.0, 6.0, float(g("bond_anchor_pct", 4.0)), 0.1) / 100
 
     st.subheader("🏛️ Policy")
-    include_age_pension = st.checkbox("Include Age Pension (means-tested)", value=True)
-    div296 = st.checkbox("Apply Division 296 ($3M super tax)", value=False)
+    include_age_pension = st.checkbox("Include Age Pension (means-tested)", value=bool(g("include_age_pension", True)))
+    div296 = st.checkbox("Apply Division 296 ($3M super tax)", value=bool(g("div296", False)))
 
     with st.expander("⚙️ Economic assumptions"):
-        inflation = st.slider("Inflation (CPI) %", 0.0, 6.0, 2.5, 0.1) / 100
-        wage_growth = st.slider("Wage growth %", 0.0, 8.0, 3.5, 0.1) / 100
-        cash_rate = st.slider("Cash / savings rate %", 0.0, 8.0, 4.0, 0.1) / 100
-        mortgage_rate = st.slider("Mortgage rate %", 1.0, 12.0, 6.2, 0.1) / 100
-        property_growth = st.slider("Property growth %", 0.0, 10.0, 5.5, 0.1) / 100
-        property_growth_vol = st.slider("Property volatility %", 0.0, 20.0, 9.0, 0.5) / 100
-        rent_yield = st.slider("Rent yield %", 1.0, 8.0, 3.8, 0.1) / 100
-        rent_growth = st.slider("Rent growth %", 0.0, 8.0, 3.5, 0.1) / 100
-        property_costs = st.slider("Ownership costs % of value", 0.0, 4.0, 1.2, 0.1) / 100
+        inflation = st.slider("Inflation (CPI) %", 0.0, 6.0, float(g("inflation", 2.5)), 0.1) / 100
+        wage_growth = st.slider("Wage growth %", 0.0, 8.0, float(g("wage_growth", 3.5)), 0.1) / 100
+        cash_rate = st.slider("Cash / savings rate %", 0.0, 8.0, float(g("cash_rate", 4.0)), 0.1) / 100
+        mortgage_rate = st.slider("Mortgage rate %", 1.0, 12.0, float(g("mortgage_rate", 6.2)), 0.1) / 100
+        property_growth = st.slider("Property growth %", 0.0, 10.0, float(g("property_growth", 5.5)), 0.1) / 100
+        property_growth_vol = st.slider("Property volatility %", 0.0, 20.0, float(g("property_growth_vol", 9.0)), 0.5) / 100
+        rent_yield = st.slider("Rent yield %", 1.0, 8.0, float(g("rent_yield", 3.8)), 0.1) / 100
+        rent_growth = st.slider("Rent growth %", 0.0, 8.0, float(g("rent_growth", 3.5)), 0.1) / 100
+        property_costs = st.slider("Ownership costs % of value", 0.0, 4.0, float(g("property_costs", 1.2)), 0.1) / 100
 
     with st.expander("🎲 Simulation"):
-        sampling_label = st.radio("Sampling method", ["Monte Carlo (normal)", "Historical bootstrap"],
+        sampling_label = st.radio("Sampling method", _SAMPLING, index=opt_index(_SAMPLING, "sampling_label", _SAMPLING[0]),
                                   help="Bootstrap resamples real past return sequences (preserving actual "
                                        "crashes); needs ≥8 years of common history or it falls back to Monte Carlo.")
         sampling_method = "bootstrap" if "bootstrap" in sampling_label.lower() else "mvn"
-        block_years = st.slider("Bootstrap block (yrs)", 1, 10, 4, disabled=sampling_method != "bootstrap")
-        n_paths = st.select_slider("Monte Carlo paths", [500, 1000, 2000, 5000], value=2000)
-        seed = st.number_input("Random seed", 0, 99999, 42)
+        block_years = st.slider("Bootstrap block (yrs)", 1, 10, int(g("block_years", 4)), disabled=sampling_method != "bootstrap")
+        _np = int(g("n_paths", 2000))
+        n_paths = st.select_slider("Monte Carlo paths", _PATHS, value=_np if _np in _PATHS else 2000)
+        seed = st.number_input("Random seed", 0, 99999, int(g("seed", 42)))
 
     submitted = st.form_submit_button("▶ Run projection", width="stretch", type="primary")
+
+st.sidebar.caption("💾 Your plan auto-saves locally and is restored next time."
+                   if STORE else "💾 Your plan will auto-save locally on each run.")
+if st.sidebar.button("↺ Reset to defaults"):
+    storage.clear()
+    st.session_state.clear()
+    st.rerun()
 
 
 # ---------------------------------------------------------------------------
 # Build objects + run (on submit or first load)
 # ---------------------------------------------------------------------------
+def plan_inputs() -> dict:
+    """All sidebar inputs as a JSON-serialisable dict, for auto-save."""
+    d = {
+        "current_age": current_age, "retirement_age": retirement_age, "end_age": end_age,
+        "current_salary": current_salary, "living_expenses": living_expenses,
+        "retirement_spending": retirement_spending, "starting_cash": starting_cash,
+        "starting_portfolio": starting_portfolio, "starting_super": starting_super,
+        "monthly_dca": monthly_dca, "salary_sacrifice": salary_sacrifice,
+        "buy_home": buy_home, "buy_age": buy_age, "home_price": home_price,
+        "deposit_target": deposit_target, "mortgage_term": mortgage_term,
+        "state": state, "first_home_buyer": first_home_buyer,
+        "fhss_enabled": fhss_enabled, "fhss_annual": fhss_annual,
+        "return_scenario": return_scenario, "return_blend_pct": round(return_blend * 100, 1),
+        "equity_anchor_pct": round(equity_anchor * 100, 1), "bond_anchor_pct": round(bond_anchor * 100, 1),
+        "include_age_pension": include_age_pension, "div296": div296,
+        "inflation": round(inflation * 100, 2), "wage_growth": round(wage_growth * 100, 2),
+        "cash_rate": round(cash_rate * 100, 2), "mortgage_rate": round(mortgage_rate * 100, 2),
+        "property_growth": round(property_growth * 100, 2), "property_growth_vol": round(property_growth_vol * 100, 2),
+        "rent_yield": round(rent_yield * 100, 2), "rent_growth": round(rent_growth * 100, 2),
+        "property_costs": round(property_costs * 100, 2),
+        "sampling_label": sampling_label, "block_years": block_years, "n_paths": n_paths, "seed": seed,
+    }
+    d.update(pf_raw)
+    d.update(su_raw)
+    return d
+
+
 def build_and_run():
     assumptions = config.Assumptions(
         inflation=inflation, wage_growth=wage_growth, cash_rate=cash_rate,
@@ -199,6 +261,7 @@ def build_and_run():
 
 
 if submitted or "results" not in st.session_state:
+    storage.save(plan_inputs())          # auto-save the current plan
     st.session_state["results"] = build_and_run()
 R = st.session_state["results"]
 buy, rent, power, stats, plan = R["buy"], R["rent"], R["power"], R["stats"], R["plan"]

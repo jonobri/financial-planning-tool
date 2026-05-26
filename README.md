@@ -26,6 +26,10 @@ Then open the URL Streamlit prints (default <http://localhost:8501>). The first
 run downloads ETF price history from Yahoo Finance and caches it under
 `data_cache/` (refreshed daily).
 
+Your sidebar inputs **auto-save** to `profiles/autosave.json` on every run and
+are restored next time you open the app — use **↺ Reset to defaults** to clear
+them. Both `data_cache/` and `profiles/` are git-ignored and stay local.
+
 Run the offline tests (no network needed):
 
 ```bash

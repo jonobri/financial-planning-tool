@@ -10,6 +10,9 @@ env/
 data_cache/
 *.parquet
 
+# Saved personal plan inputs (auto-save)
+profiles/
+
 # OS
 .DS_Store
 
