@@ -74,6 +74,7 @@ class Plan:
     # First Home Super Saver (FHSS) — voluntary contributions released at purchase
     fhss_enabled: bool = False
     fhss_annual: float = 15_000
+    fhss_already_contributed: float = 0.0   # gross FHSS already contributed to date
 
     # Housing
     buy_home: bool = True
@@ -265,8 +266,10 @@ def run_montecarlo(
         property_value = 0.0
         mortgage: housing.Mortgage | None = None
         equity_released = 0.0          # cumulative downsizing / reverse-mortgage draws
-        fhss_balance = 0.0             # FHSS releasable savings (incl. earnings)
-        fhss_contributed = 0.0         # cumulative gross FHSS contributions (cap tracking)
+        # Seed from any FHSS already contributed (assumed concessional: ~85%
+        # releasable, then grows with returns until purchase).
+        fhss_contributed = plan.fhss_already_contributed
+        fhss_balance = (0.85 * plan.fhss_already_contributed) if fhss_active else 0.0
         fhss_nonconc = 0.0             # non-concessional principal (tax-free on release)
 
         for t in range(n_years):

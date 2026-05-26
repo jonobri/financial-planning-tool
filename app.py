@@ -162,6 +162,10 @@ with itabs[2]:
                                  help="Make pre-tax super contributions and release them for the deposit.")
     fhss_annual = c[2].number_input("FHSS contribution / yr", 0, 15_000, int(g("fhss_annual", 15_000)),
                                     step=1_000, disabled=not fhss_enabled)
+    fhss_already = st.number_input("FHSS already contributed to date ($)", 0, 50_000, int(g("fhss_already", 0)),
+                                   step=1_000, disabled=not fhss_enabled,
+                                   help="Voluntary FHSS contributions you've already made. Counts toward the $50k cap; "
+                                        "assumed concessional (~85% releasable, plus earnings until purchase).")
 
 # --- Tab 4: Assumptions & scenario -----------------------------------------
 with itabs[3]:
@@ -232,7 +236,7 @@ def plan_inputs() -> dict:
         "buy_home": buy_home, "buy_age": buy_age, "home_price": home_price,
         "deposit_target": deposit_target, "mortgage_term": mortgage_term,
         "state": state, "first_home_buyer": first_home_buyer,
-        "fhss_enabled": fhss_enabled, "fhss_annual": fhss_annual,
+        "fhss_enabled": fhss_enabled, "fhss_annual": fhss_annual, "fhss_already": fhss_already,
         "return_scenario": return_scenario, "return_blend_pct": round(return_blend * 100, 1),
         "equity_anchor_pct": round(equity_anchor * 100, 1), "bond_anchor_pct": round(bond_anchor * 100, 1),
         "include_age_pension": include_age_pension, "div296": div296,
@@ -274,7 +278,7 @@ def build_and_run():
         portfolio_weights=portfolio_weights or {"VAS.AX": 1.0},
         savings_split_to_mortgage=savings_split_to_mortgage, salary_milestones=salary_milestones,
         salary_sacrifice=salary_sacrifice, super_weights=super_weights or {"VGS.AX": 1.0},
-        fhss_enabled=fhss_enabled, fhss_annual=fhss_annual,
+        fhss_enabled=fhss_enabled, fhss_annual=fhss_annual, fhss_already_contributed=fhss_already,
         buy_home=buy_home, buy_age=ba, home_price=home_price, deposit_target=deposit_target,
         mortgage_term=mortgage_term, state=state, first_home_buyer=first_home_buyer,
     )
