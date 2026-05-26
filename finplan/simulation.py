@@ -247,7 +247,7 @@ def run_montecarlo(
     # Output buffers
     comp_names = [
         "net_worth", "super", "portfolio", "cash", "home_equity", "property_value",
-        "mortgage", "spending_gap", "cashflow_gap", "age_pension",
+        "mortgage", "spending_gap", "cashflow_gap", "age_pension", "fhss_released",
     ]
     out = {k: np.zeros((n_paths, n_years)) for k in comp_names}
 
@@ -265,8 +265,9 @@ def run_montecarlo(
         property_value = 0.0
         mortgage: housing.Mortgage | None = None
         equity_released = 0.0          # cumulative downsizing / reverse-mortgage draws
-        fhss_balance = 0.0             # FHSS savings held in super, earmarked for deposit
+        fhss_balance = 0.0             # FHSS releasable savings (incl. earnings)
         fhss_contributed = 0.0         # cumulative gross FHSS contributions (cap tracking)
+        fhss_nonconc = 0.0             # non-concessional principal (tax-free on release)
 
         for t in range(n_years):
             age = plan.current_age + t
@@ -289,19 +290,26 @@ def run_montecarlo(
                 pension_phase=pension_phase,
             )
 
-            # ---- FHSS: grow earmarked balance and add a pre-tax contribution ----
+            # ---- FHSS: grow earmarked balance and add a contribution ----
+            # Contribute up to $15k/yr and $50k total (the FHSS caps). Amounts
+            # within the remaining concessional cap are pre-tax (15% in, releasable
+            # at 85%); any excess goes in as non-concessional (released in full).
             fhss_contrib = 0.0
             if fhss_active:
                 fhss_balance *= (1 + super_r[p, t] * (1 - config.SUPER_EARNINGS_TAX_RATE))
                 if not retired and t < buy_year_index and fhss_contributed < config.FHSS_TOTAL_CAP:
-                    sg = salary * config.SUPER_GUARANTEE_RATE
-                    cap_room = max(config.CONCESSIONAL_CAP - sg - plan.salary_sacrifice, 0.0)
                     fhss_contrib = min(
                         plan.fhss_annual, config.FHSS_ANNUAL_CAP,
-                        config.FHSS_TOTAL_CAP - fhss_contributed, cap_room,
+                        config.FHSS_TOTAL_CAP - fhss_contributed,
                     )
+                    sg = salary * config.SUPER_GUARANTEE_RATE
+                    cap_room = max(config.CONCESSIONAL_CAP - sg - plan.salary_sacrifice, 0.0)
+                    conc = min(fhss_contrib, cap_room)          # pre-tax portion
+                    nonconc = fhss_contrib - conc               # after-tax portion
                     fhss_contributed += fhss_contrib
-                    fhss_balance += fhss_contrib * (1 - config.CONTRIBUTIONS_TAX_RATE)  # 15% in
+                    # Releasable principal: 85% of concessional + 100% of non-concessional.
+                    fhss_balance += conc * (1 - config.CONTRIBUTIONS_TAX_RATE) + nonconc
+                    fhss_nonconc += nonconc                     # tax-free-on-release principal
 
             # ---- interest & dividends (taxable) ----
             interest_income = cash * cash_rate if cash > 0 else 0.0
@@ -318,10 +326,15 @@ def run_montecarlo(
                 pc = housing.purchase_costs(
                     plan.home_price, plan.deposit_target, plan.state, plan.first_home_buyer
                 )
-                # Release FHSS savings to cash (taxed at marginal rate less 30%).
+                # Release FHSS savings to cash. The assessable part (released
+                # concessional principal + all earnings) is taxed at marginal rate
+                # less 30%; non-concessional principal comes out tax-free.
                 if fhss_balance > 0:
-                    fhss_tax = tax.fhss_withdrawal_tax(fhss_balance, salary)
-                    cash += fhss_balance - fhss_tax
+                    assessable = max(fhss_balance - fhss_nonconc, 0.0)
+                    fhss_tax = tax.fhss_withdrawal_tax(assessable, salary)
+                    net_release = fhss_balance - fhss_tax
+                    out["fhss_released"][p, t] = net_release
+                    cash += net_release
                     fhss_balance = 0.0
                 need = pc.cash_required
                 # Fund from cash, then by selling portfolio (CGT applies).

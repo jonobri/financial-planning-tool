@@ -214,7 +214,8 @@ if rc[1].button("↺ Reset", width="stretch"):
     storage.clear()
     st.session_state.clear()
     st.rerun()
-rc[2].caption("💾 Auto-saved locally and restored next time." if STORE else "💾 Auto-saves locally on each run.")
+rc[2].caption("💾 Auto-saved locally as you edit — restored next time." if STORE
+              else "💾 Your plan auto-saves locally as you edit it.")
 
 
 # ===========================================================================
@@ -285,8 +286,8 @@ def build_and_run():
     return {"plan": plan, "sim": sim, "stats": stats, "buy": buy, "rent": rent, "power": power}
 
 
+storage.save(plan_inputs())              # auto-save on every edit (not just on Run)
 if submitted or "results" not in st.session_state:
-    storage.save(plan_inputs())
     st.session_state["results"] = build_and_run()
 R = st.session_state["results"]
 buy, rent, power, stats, plan = R["buy"], R["rent"], R["power"], R["stats"], R["plan"]
@@ -321,6 +322,14 @@ with tabs[0]:
     k[1].metric("Median terminal net worth", money(np.median(primary.terminal("net_worth", real))))
     k[2].metric("10th percentile (terminal)", money(np.percentile(primary.terminal("net_worth", real), 10)))
     k[3].metric("90th percentile (terminal)", money(np.percentile(primary.terminal("net_worth", real), 90)))
+
+    if plan.fhss_enabled and plan.buy_home:
+        rel = primary.components["fhss_released"].sum(axis=1)
+        rel = rel[rel > 0]
+        if len(rel):
+            st.caption(f"🏦 **FHSS released at purchase (median ~{money(float(np.median(rel)))}, nominal):** "
+                       "85% of concessional contributions + 100% of non-concessional + earnings, "
+                       "net of the withdrawal tax (marginal rate − 30%). Added to your deposit.")
 
     fig = fan_chart(primary, "net_worth", real, PALETTE["buy"], "Net worth")
     fig.add_vline(x=ret_age, line_dash="dot", line_color="gray", annotation_text="retire")
