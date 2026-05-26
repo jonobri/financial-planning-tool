@@ -106,17 +106,17 @@ itabs = st.tabs(["1 · You & income", "2 · Portfolio & saving", "3 · Housing",
 # --- Tab 1: You & income ---------------------------------------------------
 with itabs[0]:
     c = st.columns(3)
-    current_age = c[0].slider("Current age", 18, 75, int(g("current_age", 32)))
-    retirement_age = c[1].slider("Retirement age", 30, 80, int(g("retirement_age", 60)))
-    end_age = c[2].slider("Plan to age", 60, 105, int(g("end_age", 95)))
+    current_age = c[0].slider("Current age", 18, 75, int(g("current_age", 32)), key="current_age")
+    retirement_age = c[1].slider("Retirement age", 30, 80, int(g("retirement_age", 60)), key="retirement_age")
+    end_age = c[2].slider("Plan to age", 60, 105, int(g("end_age", 95)), key="end_age")
     c = st.columns(3)
-    current_salary = c[0].number_input("Gross salary (excl. super)", 0, 2_000_000, int(g("current_salary", 110_000)), step=5_000)
-    living_expenses = c[1].number_input("Living expenses / yr (excl. housing)", 0, 500_000, int(g("living_expenses", 45_000)), step=1_000)
-    retirement_spending = c[2].number_input("Desired retirement spend / yr", 0, 500_000, int(g("retirement_spending", 60_000)), step=1_000)
+    current_salary = c[0].number_input("Gross salary (excl. super)", 0, 2_000_000, int(g("current_salary", 110_000)), step=5_000, key="current_salary")
+    living_expenses = c[1].number_input("Living expenses / yr (excl. housing)", 0, 500_000, int(g("living_expenses", 45_000)), step=1_000, key="living_expenses")
+    retirement_spending = c[2].number_input("Desired retirement spend / yr", 0, 500_000, int(g("retirement_spending", 60_000)), step=1_000, key="retirement_spending")
     c = st.columns(3)
-    starting_cash = c[0].number_input("Starting cash / savings", 0, 5_000_000, int(g("starting_cash", 30_000)), step=5_000)
-    starting_portfolio = c[1].number_input("Starting ETF portfolio", 0, 10_000_000, int(g("starting_portfolio", 20_000)), step=5_000)
-    starting_super = c[2].number_input("Starting super", 0, 10_000_000, int(g("starting_super", 90_000)), step=5_000)
+    starting_cash = c[0].number_input("Starting cash / savings", 0, 5_000_000, int(g("starting_cash", 30_000)), step=5_000, key="starting_cash")
+    starting_portfolio = c[1].number_input("Starting ETF portfolio", 0, 10_000_000, int(g("starting_portfolio", 20_000)), step=5_000, key="starting_portfolio")
+    starting_super = c[2].number_input("Starting super", 0, 10_000_000, int(g("starting_super", 90_000)), step=5_000, key="starting_super")
 
     st.markdown("**Income step-ups (optional)** — salary jumps to these amounts at the given ages "
                 "(e.g. promotions); between them it grows at the wage-growth rate.")
@@ -143,36 +143,36 @@ with itabs[1]:
     st.markdown("**Saving** — each year, whatever's left after tax, living costs and housing is your savings. "
                 "Choose how to split it (the mortgage portion only applies once you own a home):")
     c = st.columns([2, 1])
-    split_pct = c[0].slider("→ Extra mortgage repayments %  (the rest goes to ETF investing)", 0, 100, int(g("savings_split_pct", 40)))
+    split_pct = c[0].slider("→ Extra mortgage repayments %  (the rest goes to ETF investing)", 0, 100, int(g("savings_split_pct", 40)), key="savings_split_pct")
     savings_split_to_mortgage = split_pct / 100
     c[1].metric("Split", f"{split_pct}% mortgage", f"{100-split_pct}% ETFs", delta_color="off")
-    salary_sacrifice = st.number_input("Extra super salary sacrifice / yr", 0, 30_000, int(g("salary_sacrifice", 0)), step=500)
+    salary_sacrifice = st.number_input("Extra super salary sacrifice / yr", 0, 30_000, int(g("salary_sacrifice", 0)), step=500, key="salary_sacrifice")
 
 # --- Tab 3: Housing --------------------------------------------------------
 with itabs[2]:
     c = st.columns(3)
-    buy_home = c[0].checkbox("Model buying a home", value=bool(g("buy_home", True)))
-    first_home_buyer = c[1].checkbox("First home buyer concession", value=bool(g("first_home_buyer", True)))
-    state = c[2].selectbox("State (stamp duty)", _STATES, index=opt_index(_STATES, "state", "NSW"))
+    buy_home = c[0].checkbox("Model buying a home", value=bool(g("buy_home", True)), key="buy_home")
+    first_home_buyer = c[1].checkbox("First home buyer concession", value=bool(g("first_home_buyer", True)), key="first_home_buyer")
+    state = c[2].selectbox("State (stamp duty)", _STATES, index=opt_index(_STATES, "state", "NSW"), key="state")
     c = st.columns(3)
-    buy_age = c[0].slider("Purchase age", 18, 80, int(g("buy_age", 35)))
-    home_price = c[1].number_input("Home price (today's $)", 0, 10_000_000, int(g("home_price", 850_000)), step=25_000)
-    deposit_target = c[2].number_input("Cash deposit", 0, 5_000_000, int(g("deposit_target", 170_000)), step=10_000)
+    buy_age = c[0].slider("Purchase age", 18, 80, int(g("buy_age", 35)), key="buy_age")
+    home_price = c[1].number_input("Home price (today's $)", 0, 10_000_000, int(g("home_price", 850_000)), step=25_000, key="home_price")
+    deposit_target = c[2].number_input("Cash deposit", 0, 5_000_000, int(g("deposit_target", 170_000)), step=10_000, key="deposit_target")
     c = st.columns(3)
-    mortgage_term = c[0].slider("Mortgage term (yrs)", 10, 30, int(g("mortgage_term", 30)))
-    fhss_enabled = c[1].checkbox("Use First Home Super Saver (FHSS)", value=bool(g("fhss_enabled", False)),
+    mortgage_term = c[0].slider("Mortgage term (yrs)", 10, 30, int(g("mortgage_term", 30)), key="mortgage_term")
+    fhss_enabled = c[1].checkbox("Use First Home Super Saver (FHSS)", value=bool(g("fhss_enabled", False)), key="fhss_enabled",
                                  help="Make pre-tax super contributions and release them for the deposit.")
     fhss_annual = c[2].number_input("FHSS contribution / yr", 0, 15_000, int(g("fhss_annual", 15_000)),
-                                    step=1_000, disabled=not fhss_enabled)
+                                    step=1_000, disabled=not fhss_enabled, key="fhss_annual")
     fhss_already = st.number_input("FHSS already contributed to date ($)", 0, 50_000, int(g("fhss_already", 0)),
-                                   step=1_000, disabled=not fhss_enabled,
+                                   step=1_000, disabled=not fhss_enabled, key="fhss_already",
                                    help="Voluntary FHSS contributions you've already made. Counts toward the $50k cap; "
                                         "assumed concessional (~85% releasable, plus earnings until purchase).")
 
 # --- Tab 4: Assumptions & scenario -----------------------------------------
 with itabs[3]:
     c = st.columns([2, 1, 1])
-    return_scenario = c[0].selectbox("Return scenario", _SCENARIOS, index=opt_index(_SCENARIOS, "return_scenario", _SCENARIOS[1]),
+    return_scenario = c[0].selectbox("Return scenario", _SCENARIOS, index=opt_index(_SCENARIOS, "return_scenario", _SCENARIOS[1]), key="return_scenario",
                                      help="Recent ETF history can overstate the future. Blend it toward sustainable long-run anchors.")
     if return_scenario == "Historical (full window)":
         return_blend, equity_anchor, bond_anchor = 0.0, 0.08, 0.04
@@ -181,34 +181,34 @@ with itabs[3]:
     elif return_scenario == "Conservative (long-run)":
         return_blend, equity_anchor, bond_anchor = 1.0, 0.07, 0.035
     else:
-        return_blend = c[1].slider("Blend → long-run %", 0, 100, int(g("return_blend_pct", 50))) / 100
-        equity_anchor = c[2].slider("Equity anchor %", 4.0, 12.0, float(g("equity_anchor_pct", 8.0)), 0.1) / 100
-        bond_anchor = c[2].slider("Bond anchor %", 1.0, 6.0, float(g("bond_anchor_pct", 4.0)), 0.1) / 100
+        return_blend = c[1].slider("Blend → long-run %", 0, 100, int(g("return_blend_pct", 50)), key="return_blend_pct") / 100
+        equity_anchor = c[2].slider("Equity anchor %", 4.0, 12.0, float(g("equity_anchor_pct", 8.0)), 0.1, key="equity_anchor_pct") / 100
+        bond_anchor = c[2].slider("Bond anchor %", 1.0, 6.0, float(g("bond_anchor_pct", 4.0)), 0.1, key="bond_anchor_pct") / 100
 
     c = st.columns(3)
-    include_age_pension = c[0].checkbox("Include Age Pension (means-tested)", value=bool(g("include_age_pension", True)))
-    div296 = c[1].checkbox("Apply Division 296 ($3M super tax)", value=bool(g("div296", False)))
-    sampling_label = c[2].radio("Sampling method", _SAMPLING, index=opt_index(_SAMPLING, "sampling_label", _SAMPLING[0]),
+    include_age_pension = c[0].checkbox("Include Age Pension (means-tested)", value=bool(g("include_age_pension", True)), key="include_age_pension")
+    div296 = c[1].checkbox("Apply Division 296 ($3M super tax)", value=bool(g("div296", False)), key="div296")
+    sampling_label = c[2].radio("Sampling method", _SAMPLING, index=opt_index(_SAMPLING, "sampling_label", _SAMPLING[0]), key="sampling_label",
                                 help="Bootstrap resamples real past sequences; needs ≥8 yrs common history or it falls back.")
     sampling_method = "bootstrap" if "bootstrap" in sampling_label.lower() else "mvn"
 
     with st.expander("Economic assumptions"):
         c = st.columns(3)
-        inflation = c[0].slider("Inflation (CPI) %", 0.0, 6.0, float(g("inflation", 2.5)), 0.1) / 100
-        wage_growth = c[1].slider("Wage growth %", 0.0, 8.0, float(g("wage_growth", 3.5)), 0.1) / 100
-        cash_rate = c[2].slider("Cash rate %", 0.0, 8.0, float(g("cash_rate", 4.0)), 0.1) / 100
-        mortgage_rate = c[0].slider("Mortgage rate %", 1.0, 12.0, float(g("mortgage_rate", 6.2)), 0.1) / 100
-        property_growth = c[1].slider("Property growth %", 0.0, 10.0, float(g("property_growth", 5.5)), 0.1) / 100
-        property_growth_vol = c[2].slider("Property volatility %", 0.0, 20.0, float(g("property_growth_vol", 9.0)), 0.5) / 100
-        rent_yield = c[0].slider("Rent yield %", 1.0, 8.0, float(g("rent_yield", 3.8)), 0.1) / 100
-        rent_growth = c[1].slider("Rent growth %", 0.0, 8.0, float(g("rent_growth", 3.5)), 0.1) / 100
-        property_costs = c[2].slider("Ownership costs %", 0.0, 4.0, float(g("property_costs", 1.2)), 0.1) / 100
+        inflation = c[0].slider("Inflation (CPI) %", 0.0, 6.0, float(g("inflation", 2.5)), 0.1, key="inflation") / 100
+        wage_growth = c[1].slider("Wage growth %", 0.0, 8.0, float(g("wage_growth", 3.5)), 0.1, key="wage_growth") / 100
+        cash_rate = c[2].slider("Cash rate %", 0.0, 8.0, float(g("cash_rate", 4.0)), 0.1, key="cash_rate") / 100
+        mortgage_rate = c[0].slider("Mortgage rate %", 1.0, 12.0, float(g("mortgage_rate", 6.2)), 0.1, key="mortgage_rate") / 100
+        property_growth = c[1].slider("Property growth %", 0.0, 10.0, float(g("property_growth", 5.5)), 0.1, key="property_growth") / 100
+        property_growth_vol = c[2].slider("Property volatility %", 0.0, 20.0, float(g("property_growth_vol", 9.0)), 0.5, key="property_growth_vol") / 100
+        rent_yield = c[0].slider("Rent yield %", 1.0, 8.0, float(g("rent_yield", 3.8)), 0.1, key="rent_yield") / 100
+        rent_growth = c[1].slider("Rent growth %", 0.0, 8.0, float(g("rent_growth", 3.5)), 0.1, key="rent_growth") / 100
+        property_costs = c[2].slider("Ownership costs %", 0.0, 4.0, float(g("property_costs", 1.2)), 0.1, key="property_costs") / 100
     with st.expander("Simulation"):
         c = st.columns(3)
-        block_years = c[0].slider("Bootstrap block (yrs)", 1, 10, int(g("block_years", 4)), disabled=sampling_method != "bootstrap")
+        block_years = c[0].slider("Bootstrap block (yrs)", 1, 10, int(g("block_years", 4)), disabled=sampling_method != "bootstrap", key="block_years")
         _np = int(g("n_paths", 2000))
-        n_paths = c[1].select_slider("Monte Carlo paths", _PATHS, value=_np if _np in _PATHS else 2000)
-        seed = c[2].number_input("Random seed", 0, 99999, int(g("seed", 42)))
+        n_paths = c[1].select_slider("Monte Carlo paths", _PATHS, value=_np if _np in _PATHS else 2000, key="n_paths")
+        seed = c[2].number_input("Random seed", 0, 99999, int(g("seed", 42)), key="seed")
 
 # --- Run / reset row -------------------------------------------------------
 if not (current_age < retirement_age < end_age and current_age <= buy_age <= end_age):
