@@ -71,16 +71,15 @@ def weight_inputs(label: str, defaults: dict[str, float], key: str):
     return {t: w / total for t, w in weights.items()}, raw
 
 
-def fan_chart(result, component, real, color, name, fig=None, pcts=(10, 25, 50, 75, 90)):
+def fan_chart(result, component, real, color, name, fig=None, pcts=(25, 50, 75)):
+    """Median line with a shaded 25–75% band (the 10–90% band is intentionally
+    omitted — geared funds' wide tails made it unreadable)."""
     df = result.percentiles(component, pcts=pcts, real=real)
     ages = df.index
     fig = fig or go.Figure()
     rgba = lambda h, a: f"rgba({int(h[1:3],16)},{int(h[3:5],16)},{int(h[5:7],16)},{a})"
-    fig.add_trace(go.Scatter(x=ages, y=df["p90"], line=dict(width=0), showlegend=False, hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=ages, y=df["p10"], fill="tonexty", fillcolor=rgba(color, 0.12),
-                             line=dict(width=0), name=f"{name} 10–90%", hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=ages, y=df["p75"], line=dict(width=0), showlegend=False, hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=ages, y=df["p25"], fill="tonexty", fillcolor=rgba(color, 0.25),
+    fig.add_trace(go.Scatter(x=ages, y=df["p25"], fill="tonexty", fillcolor=rgba(color, 0.22),
                              line=dict(width=0), name=f"{name} 25–75%", hoverinfo="skip"))
     fig.add_trace(go.Scatter(x=ages, y=df["p50"], line=dict(color=color, width=3), name=f"{name} median",
                              hovertemplate="age %{x}: %{y:$,.0f}<extra></extra>"))

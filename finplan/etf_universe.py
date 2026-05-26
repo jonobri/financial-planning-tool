@@ -66,6 +66,7 @@ ETF_UNIVERSE: dict[str, ETF] = {
         # the more moderately geared (~30-40% LVR) Wealth Builder range.
         ETF("GEAR.AX", "Betashares Geared Australian Equity (G)", "Geared Equity", 0.0080, 0.70, 0.020, 2014),
         ETF("GGUS.AX", "Betashares Geared US Equity – Currency Hedged (G)", "Geared Equity", 0.0080, 0.0, 0.010, 2015),
+        ETF("GGBL.AX", "Betashares Geared Global Equity – Currency Hedged (G)", "Geared Equity", 0.0080, 0.0, 0.010, 2025),
         ETF("GHHF.AX", "Betashares Wealth Builder Diversified All Growth Geared", "Geared Diversified", 0.0035, 0.25, 0.020, 2024),
         ETF("G200.AX", "Betashares Wealth Builder Australia 200 Geared", "Geared Diversified", 0.0035, 0.65, 0.025, 2024),
     ]
