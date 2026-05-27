@@ -17,11 +17,17 @@ from finplan.home_optimizer import (HomeParams, breakeven_year, deposit_sweep,
                                     project, timing_sweep)
 
 st.set_page_config(page_title="Home Buying Optimiser", layout="wide", page_icon="🏠")
-S = storage.load()
+S = storage.load()                 # main plan (for first-time prefill)
+OPT = storage.load("optimiser")    # this page's own saved inputs
 
 
 def g(key, default):
     return S.get(key, default)
+
+
+def gv(key, default):
+    """Optimiser's own saved value, falling back to the plan-derived default."""
+    return OPT.get(key, default)
 
 
 def money(x: float) -> str:
@@ -49,29 +55,31 @@ default_savings = int(g("starting_cash", 30_000) + g("starting_portfolio", 20_00
 
 with st.expander("⚙️ Inputs (prefilled from your saved plan — adjust as needed)", expanded=True):
     c = st.columns(4)
-    home_price = c[0].number_input("Home price (today's $)", 0, 10_000_000, int(g("home_price", 750_000)), step=25_000, key="ho_price")
-    savings_now = c[1].number_input("Savings available now", 0, 10_000_000, default_savings, step=10_000, key="ho_savings")
-    annual_surplus = c[2].number_input("Annual surplus (take-home − living)", 0, 1_000_000, default_surplus, step=2_000, key="ho_surplus",
+    home_price = c[0].number_input("Home price (today's $)", 0, 10_000_000, int(gv("price", g("home_price", 750_000))), step=25_000, key="ho_price")
+    savings_now = c[1].number_input("Savings available now", 0, 10_000_000, int(gv("savings", default_savings)), step=10_000, key="ho_savings")
+    annual_surplus = c[2].number_input("Annual surplus (take-home − living)", 0, 1_000_000, int(gv("surplus", default_surplus)), step=2_000, key="ho_surplus",
                                        help="Your yearly budget for housing + investing. Prefilled from salary − income tax − living costs.")
-    rent_now = c[3].number_input("Current annual rent (equivalent home)", 0, 500_000, default_rent, step=1_000, key="ho_rent")
+    rent_now = c[3].number_input("Current annual rent (equivalent home)", 0, 500_000, int(gv("rent", default_rent)), step=1_000, key="ho_rent")
 
     c = st.columns(4)
-    mortgage_rate = c[0].slider("Mortgage rate %", 1.0, 12.0, float(g("mortgage_rate", 6.2)), 0.1, key="ho_mrate") / 100
-    investment_return = c[1].slider("Investment return % (opportunity cost)", 0.0, 12.0, 7.5, 0.1, key="ho_invest",
+    mortgage_rate = c[0].slider("Mortgage rate %", 1.0, 12.0, float(gv("mrate", g("mortgage_rate", 6.2))), 0.1, key="ho_mrate") / 100
+    investment_return = c[1].slider("Investment return % (opportunity cost)", 0.0, 12.0, float(gv("invest", 7.5)), 0.1, key="ho_invest",
                                     help="Return your deposit/savings would earn if invested instead. If this beats property growth, smaller deposits look better.") / 100
-    property_growth = c[2].slider("Property growth %", 0.0, 10.0, float(g("property_growth", 5.5)), 0.1, key="ho_pgrow") / 100
-    ownership_cost = c[3].slider("Ownership costs % of value/yr", 0.0, 4.0, float(g("property_costs", 1.2)), 0.1, key="ho_own") / 100
+    property_growth = c[2].slider("Property growth %", 0.0, 10.0, float(gv("pgrow", g("property_growth", 5.5))), 0.1, key="ho_pgrow") / 100
+    ownership_cost = c[3].slider("Ownership costs % of value/yr", 0.0, 4.0, float(gv("own", g("property_costs", 1.2))), 0.1, key="ho_own") / 100
 
     c = st.columns(4)
-    mortgage_term = c[0].slider("Mortgage term (yrs)", 10, 30, int(g("mortgage_term", 30)), key="ho_term")
-    horizon = c[1].slider("Comparison horizon (yrs)", 10, 40, 30, key="ho_horizon")
-    rent_growth = c[2].slider("Rent growth %", 0.0, 8.0, float(g("rent_growth", 3.5)), 0.1, key="ho_rgrow") / 100
-    inflation = c[3].slider("Inflation %", 0.0, 6.0, float(g("inflation", 2.5)), 0.1, key="ho_infl") / 100
+    mortgage_term = c[0].slider("Mortgage term (yrs)", 10, 30, int(gv("term", g("mortgage_term", 30))), key="ho_term")
+    horizon = c[1].slider("Comparison horizon (yrs)", 10, 40, int(gv("horizon", 30)), key="ho_horizon")
+    rent_growth = c[2].slider("Rent growth %", 0.0, 8.0, float(gv("rgrow", g("rent_growth", 3.5))), 0.1, key="ho_rgrow") / 100
+    inflation = c[3].slider("Inflation %", 0.0, 6.0, float(gv("infl", g("inflation", 2.5))), 0.1, key="ho_infl") / 100
 
     c = st.columns(4)
-    state = c[0].selectbox("State (stamp duty)", ["NSW", "VIC", "OTHER"],
-                           index=["NSW", "VIC", "OTHER"].index(g("state", "NSW")) if g("state", "NSW") in ["NSW", "VIC", "OTHER"] else 0, key="ho_state")
-    first_home_buyer = c[1].checkbox("First home buyer concession", value=bool(g("first_home_buyer", True)), key="ho_fhb")
+    _states = ["NSW", "VIC", "OTHER"]
+    _saved_state = gv("state", g("state", "NSW"))
+    state = c[0].selectbox("State (stamp duty)", _states,
+                           index=_states.index(_saved_state) if _saved_state in _states else 0, key="ho_state")
+    first_home_buyer = c[1].checkbox("First home buyer concession", value=bool(gv("fhb", g("first_home_buyer", True))), key="ho_fhb")
 
 p = HomeParams(
     annual_surplus=annual_surplus, rent_now=rent_now, rent_growth=rent_growth,
@@ -135,7 +143,7 @@ with tabs[1]:
     st.caption("Buying sooner stops rent and captures property growth, but means a smaller deposit (more interest, "
                "maybe LMI). Waiting builds a bigger deposit but you pay more rent and face a higher price. "
                "Net worth is at your horizon, in today's dollars.")
-    deposit_frac_t = st.slider("Deposit assumed (% of price at purchase)", 5, 50, 20, 5, key="ho_tdep") / 100
+    deposit_frac_t = st.slider("Deposit assumed (% of price at purchase)", 5, 50, int(gv("tdep", 20)), 5, key="ho_tdep") / 100
     years_list = list(range(0, min(16, horizon - 1)))
     ts = timing_sweep(home_price, years_list, deposit_frac_t, savings_now, p)
 
@@ -178,8 +186,8 @@ with tabs[2]:
                "ownership costs (if you bought) — the money neither path gets back — plus where buying's net "
                "worth overtakes renting.")
     c = st.columns(2)
-    dep_c = c[0].slider("Deposit (% of price)", 5, 50, 20, 5, key="ho_cdep") / 100
-    buy_in_c = c[1].slider("Buy in N years", 0, min(15, horizon - 1), 0, key="ho_cwhen")
+    dep_c = c[0].slider("Deposit (% of price)", 5, 50, int(gv("cdep", 20)), 5, key="ho_cdep") / 100
+    buy_in_c = c[1].slider("Buy in N years", 0, min(15, horizon - 1), min(int(gv("cwhen", 0)), min(15, horizon - 1)), key="ho_cwhen")
     df = project(home_price, dep_c, buy_in_c, savings_now, p)
 
     fig = go.Figure()
@@ -210,3 +218,14 @@ with tabs[2]:
     if not bool(last["feasible"]):
         st.warning(f"⚠️ A {dep_c*100:.0f}% deposit isn't affordable {('now' if buy_in_c==0 else f'in {buy_in_c} years')} "
                    f"with {money(savings_now)} saved plus accumulated savings — results assume you fund the gap.")
+
+# --- auto-save this page's own inputs (separate profile from the main plan) ---
+storage.save({
+    "price": home_price, "savings": savings_now, "surplus": annual_surplus, "rent": rent_now,
+    "mrate": round(mortgage_rate * 100, 2), "invest": round(investment_return * 100, 2),
+    "pgrow": round(property_growth * 100, 2), "own": round(ownership_cost * 100, 2),
+    "term": mortgage_term, "horizon": horizon, "rgrow": round(rent_growth * 100, 2),
+    "infl": round(inflation * 100, 2), "state": state, "fhb": first_home_buyer,
+    "tdep": int(deposit_frac_t * 100), "cdep": int(dep_c * 100), "cwhen": int(buy_in_c),
+}, "optimiser")
+st.caption("💾 These inputs auto-save locally and are restored next time (separate from the main plan).")
